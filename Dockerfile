@@ -5,8 +5,8 @@ FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
-RUN if[ -f yarn.lock ]; then yarn --frozen-lockfile; \
-    elif[ -f package-lock.json ]; then npm ci; \
+RUN if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
+    elif [ -f package-lock.json ]; then npm ci; \
     elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm i --frozen-lockfile; \
     else echo "Warning: Lockfile not found. It is recommended to commit lockfiles to version control." && npm install; \
     fi
@@ -39,4 +39,5 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD["node", "server.js"]
+CMD ["node", "server.js"]
+
