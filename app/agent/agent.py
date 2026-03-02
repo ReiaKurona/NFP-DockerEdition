@@ -160,7 +160,7 @@ def loop():
     last_sync = time.time()
     
     while True:
-        interval = 75 # 默認心跳間隔 75 秒
+        interval = 15 # 默認心跳間隔 15 秒,vercel版由於免費額度限制，需要節約請求數為75秒
         try:
             # 構建心跳數據包（包含節點認證和系統狀態）
             payload = { "nodeId": CONFIG["node_id"], "token": CONFIG["token"], "stats": monitor.get_stats() }
