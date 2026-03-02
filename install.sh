@@ -7,7 +7,7 @@
 
 # ================= 🚀 用户配置区 (在此处修改) 🚀 =================
 # 项目 GitHub 仓库地址 (用于本地构建模式)
-GITHUB_REPO="ReiaKurona/NFP"
+GITHUB_REPO="ReiaKurona/NFP-DockerEdition"
 # Docker 镜像地址 (用于预构建镜像模式)
 DOCKER_IMAGE="ghcr.io/reiakurona/nfp-dockeredition:latest"
 
@@ -163,7 +163,7 @@ clone_project_with_fallback() {
 
     # 全部失败
     echo -e "${RED}所有镜像源均连接超时！${NC}"
-    read -p "是否重试? [Y/n]: " retry
+    read -p "是否重试? [Y/n]: " retry < /dev/tty
     if [[ "$retry" != "n" && "$retry" != "N" ]]; then
         clone_project_with_fallback "$target_dir"
     else
@@ -275,7 +275,7 @@ reinstall_project() {
     fi
     
     echo -e "${RED}⚠️ 警告：这将会彻底删除面板内的所有节点和转发规则！${NC}"
-    read -p "确定要重装/恢复出厂设置吗? [y/N]: " confirm
+    read -p "确定要重装/恢复出厂设置吗? [y/N]: " confirm < /dev/tty
     if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
         cd "$INSTALL_DIR" || exit
         echo -e "${CYAN}正在停止并清理数据卷...${NC}"
@@ -291,7 +291,7 @@ reinstall_project() {
 # --- 彻底卸载 ---
 uninstall_project() {
     echo -e "${RED}⚠️ 警告：这将会彻底卸载本面板，并删除所有相关文件及数据！${NC}"
-    read -p "确定要卸载吗? [y/N]: " confirm
+    read -p "确定要卸载吗? [y/N]: " confirm < /dev/tty
     if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
         if [ -d "$INSTALL_DIR" ]; then
             cd "$INSTALL_DIR" || exit
@@ -326,7 +326,9 @@ show_menu() {
     echo -e "${BLUE}================================================${NC}"
     echo -e "提示: 安装后可通过输入 ${YELLOW}nfp${NC} 随时唤出本菜单。"
     echo ""
-    read -p "请输入对应数字 [0-5]: " choice
+    
+    # 修复：使用 < /dev/tty 强制从终端读取，解决 curl | bash 模式下的死循环问题
+    read -p "请输入对应数字 [0-5]: " choice < /dev/tty
 
     case "$choice" in
         1)
