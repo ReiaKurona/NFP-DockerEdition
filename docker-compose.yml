@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  aero-panel:
+    build: .
+    container_name: aero-panel
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:alpine
+    container_name: aero-redis
+    restart: unless-stopped
+    volumes:
+      - aero-redis-data:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  aero-redis-data:

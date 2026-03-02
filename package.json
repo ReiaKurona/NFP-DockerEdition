@@ -1,0 +1,33 @@
+{
+  "name": "aero-panel",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "ioredis": "latest",
+    "axios": "latest",
+    "clsx": "latest",
+    "tailwind-merge": "latest",
+    "lucide-react": "latest",
+    "framer-motion": "latest",
+    "otplib": "latest",
+    "qrcode.react": "latest"
+  },
+  "devDependencies": {
+    "autoprefixer": "latest",
+    "postcss": "latest",
+    "tailwindcss": "latest",
+    "typescript": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest"
+  }
+}
