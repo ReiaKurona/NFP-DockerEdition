@@ -9,7 +9,7 @@
 # 项目 GitHub 仓库地址 (用于本地构建模式)
 GITHUB_REPO="ReiaKurona/NFP"
 # Docker 镜像地址 (用于预构建镜像模式)
-DOCKER_IMAGE="ghcr.io/reiakurona/aero-panel:latest"
+DOCKER_IMAGE="ghcr.io/reiakurona/nfp-dockeredition:latest"
 
 # 备用源 1 (如 GitHub 代理加速)
 MIRROR_1_PREFIX="https://mirror.ghproxy.com/https://github.com/"
