@@ -55,7 +55,7 @@ run_with_countdown() {
             wait $pid
             local status=$?
             echo -ne "\r\033[K" # 清除当前行
-            if[ $status -eq 0 ]; then
+            if [ $status -eq 0 ]; then
                 echo -e "${GREEN}✅ ${desc} 成功!${NC}"
                 return 0
             else
