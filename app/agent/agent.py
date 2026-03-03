@@ -1,4 +1,5 @@
 import sys, json, time, base64, urllib.request, urllib.parse, subprocess, threading, os
+import socket
 from datetime import datetime
 
 # 定義日誌文件路徑
@@ -153,6 +154,78 @@ def download_and_apply_config():
     except Exception as e:
         log(f"Download Exception: {e}")
 
+
+# --- 新增：診斷模塊 (TCP Ping) ---
+def tcp_ping(ip, port, count=3):
+    latencies =[]
+    success = 0
+    for _ in range(count):
+        start = time.time()
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(2.0) # 設置 2 秒超時
+            s.connect((ip, int(port)))
+            s.close()
+            # 記錄延遲(毫秒)
+            latencies.append((time.time() - start) * 1000)
+            success += 1
+        except Exception as e:
+            pass # 失敗則不記錄到 latencies
+        time.sleep(0.2)
+    
+    if success > 0:
+        avg_lat = sum(latencies) / len(latencies)
+        loss = ((count - success) / count) * 100
+        quality = "很好" if avg_lat < 100 else "一般" if avg_lat < 250 else "較差"
+        return {
+            "status": "成功",
+            "latency": int(avg_lat),
+            "loss": f"{loss:.1f}%",
+            "quality": quality,
+            "success": success,
+            "fail": count - success,
+            "total": count
+        }
+    else:
+        return {
+            "status": "超時",
+            "latency": "-",
+            "loss": "100%",
+            "quality": "不可達",
+            "success": 0,
+            "fail": count,
+            "total": count
+        }
+
+def run_diagnose_task(task_data):
+    try:
+        task_id = task_data.get("taskId")
+        ip = task_data.get("dest_ip")
+        port = task_data.get("dest_port")
+        log(f"Running diagnose task {task_id} for {ip}:{port}")
+        
+        # 執行 TCP Ping 測試
+        result = tcp_ping(ip, port)
+        
+        # 構造彙報請求
+        payload = {
+            "nodeId": CONFIG["node_id"],
+            "token": CONFIG["token"],
+            "taskId": task_id,
+            "result": result
+        }
+        b64 = base64.b64encode(json.dumps(payload).encode()).decode()
+        url = f"{CONFIG['panel_url']}/agent?action=REPORT_DIAGNOSE&data={urllib.parse.quote(b64)}"
+        
+        req = urllib.request.Request(url, headers={'User-Agent': 'AeroAgent/8.0'})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status == 200:
+                log(f"Diagnose result for {task_id} reported successfully.")
+            else:
+                log(f"Failed to report diagnose: HTTP {resp.status}")
+    except Exception as e:
+        log(f"Diagnose task error: {e}")
+
 # 程序主循環
 def loop():
     log(f"Agent started. Config URL: {CONFIG_URL}")
@@ -160,7 +233,7 @@ def loop():
     last_sync = time.time()
     
     while True:
-        interval = 15 # 默認心跳間隔 15 秒,vercel版由於免費額度限制，需要節約請求數為75秒
+        interval = 15 # 默認心跳間隔 75 秒
         try:
             # 構建心跳數據包（包含節點認證和系統狀態）
             payload = { "nodeId": CONFIG["node_id"], "token": CONFIG["token"], "stats": monitor.get_stats() }
@@ -174,6 +247,12 @@ def loop():
                 if resp.status == 200:
                     data = json.loads(resp.read().decode())
                     if data.get("interval"): interval = data["interval"] # 允許面板動態調整心跳間隔
+                    
+                    # 檢查是否有測試任務
+                    if "diag_task" in data and data["diag_task"]:
+                        # 開啟新線程執行測試任務，避免阻塞心跳和主循環
+                        threading.Thread(target=run_diagnose_task, args=(data["diag_task"],)).start()
+
                     # 如果面板下發了更新指令 (has_cmd)，或者距離上次同步超過 180 秒，則重新拉取規則
                     if data.get("has_cmd") or (time.time() - last_sync > 180):
                         download_and_apply_config()
