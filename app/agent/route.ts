@@ -1,5 +1,5 @@
 //import { kv } from "@vercel/kv";vercel
-import { kv } from "@/lib/kv"; Docker版专用库
+import { kv } from "@/lib/kv"; //Docker版专用库
 import { NextResponse } from "next/server";
 
 // 強制動態渲染，禁止緩存，確保獲取最新指令
@@ -84,8 +84,8 @@ export async function GET(req: Request) {
 
       return NextResponse.json({
         success: true,
-        // 如果面板活躍，要求 Agent 每 3 秒上報一次，否則 75 秒
-        interval: isActive ? 3 : 75,
+        // 如果面板活躍，要求 Agent 每 3 秒上報一次，否則 15 秒Docker版，vercel为75秒
+        interval: isActive ? 3 : 15,
         // 如果有指令 (如 UPDATE)，通知 Agent 去下載配置
         has_cmd: !!pendingCmd,
         // 附加測試任務數據 (若有)
