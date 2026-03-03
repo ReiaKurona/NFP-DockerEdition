@@ -1,4 +1,5 @@
-import { kv } from "@/lib/kv";
+//import { kv } from "@vercel/kv";vercel
+import { kv } from "@/lib/kv"; Docker版专用库
 import { NextResponse } from "next/server";
 
 // 強制動態渲染，禁止緩存，確保獲取最新指令
@@ -29,7 +30,7 @@ export async function GET(req: Request) {
         }
 
         // 從 Redis 讀取該節點的規則列表
-        const rules = await kv.lrange(`rules:${nodeId}`, 0, -1) || [];
+        const rules = await kv.lrange(`rules:${nodeId}`, 0, -1) ||[];
         
         // 關鍵步驟：清除更新標記 (cmd)，表示 Agent 已成功獲取最新配置
         await kv.del(`cmd:${nodeId}`);
@@ -69,6 +70,13 @@ export async function GET(req: Request) {
       // 檢查是否有待執行的指令 (例如：配置已更新)
       const pendingCmd = await kv.get(`cmd:${nodeId}`);
       
+      // 新增：檢查是否有待執行的延遲測試請求
+      const diagReq = await kv.get(`diag_req:${nodeId}`);
+      if (diagReq) {
+          // 讀取後馬上銷毀，防止重複發送給 Agent 導致重複測試
+          await kv.del(`diag_req:${nodeId}`);
+      }
+
       // 檢查管理面板是否活躍 (用於動態調整心跳頻率)
       // panel_activity 由管理員面板接口寫入
       const lastActivity = await kv.get<number>("panel_activity") || 0;
@@ -76,11 +84,36 @@ export async function GET(req: Request) {
 
       return NextResponse.json({
         success: true,
-        // 如果面板活躍，要求 Agent 每 3 秒上報一次，否則 15 秒 vercel版為75秒
-        interval: isActive ? 3 : 15,
+        // 如果面板活躍，要求 Agent 每 3 秒上報一次，否則 75 秒
+        interval: isActive ? 3 : 75,
         // 如果有指令 (如 UPDATE)，通知 Agent 去下載配置
-        has_cmd: !!pendingCmd 
+        has_cmd: !!pendingCmd,
+        // 附加測試任務數據 (若有)
+        diag_task: diagReq || null
       });
+    }
+
+    // ==========================================
+    // 3. 新增：Agent 彙報測試結果接口
+    // ==========================================
+    if (action === "REPORT_DIAGNOSE" && dataStr) {
+        const cleanData = dataStr.replace(/ /g, '+');
+        let data;
+        try {
+            data = JSON.parse(Buffer.from(cleanData, 'base64').toString('utf-8'));
+        } catch (e) { return NextResponse.json({ error: "Decode Error" }, { status: 400 }); }
+
+        const { nodeId, token, taskId, result } = data;
+        const node: any = await kv.hget("nodes", nodeId);
+
+        // 嚴格校驗 Token
+        if (!node || node.token !== token) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        // 將測試結果存入 KV 數據庫，設置 30 秒 TTL (等待前端獲取)
+        await kv.set(`diag_res:${taskId}`, result, { ex: 30 });
+        return NextResponse.json({ success: true });
     }
     
     return NextResponse.json({ error: "Invalid Action" }, { status: 400 });
