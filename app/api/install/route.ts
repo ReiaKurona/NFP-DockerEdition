@@ -43,7 +43,7 @@ SERVICE_NAME="aero-agent"
 LOG_FILE="/var/log/aero-agent.log"
 
 # 1. 系統組件檢查
-echo -e "\${BLUE}[1/3] 準備系統環境...\${NC}"
+echo -e "\${BLUE}[1/4] 準備系統環境...\${NC}"
 
 # 檢查與安裝 python3
 if ! command -v python3 &> /dev/null; then
@@ -91,7 +91,7 @@ NFT_BIN=$(command -v nft)
 if [ -z "$NFT_BIN" ]; then NFT_BIN="/usr/sbin/nft"; fi
 
 # 2. 部署代碼
-echo -e "\${BLUE}[2/3] 寫入配置與下載 Agent 核心代碼...\${NC}"
+echo -e "\${BLUE}[2/4] 寫入配置與下載 Agent 核心代碼...\${NC}"
 
 cat > config.json <<EOF
 { "token": "$TOKEN", "node_id": "$NODE_ID", "panel_url": "$PANEL_URL", "nft_bin": "$NFT_BIN" }
@@ -112,7 +112,7 @@ if [ ! -s agent.py ]; then
 fi
 
 # 3. 創建系統服務
-echo -e "\${BLUE}[3/3] 註冊服務...\${NC}"
+echo -e "\${BLUE}[3/4] 註冊服務...\${NC}"
 
 PY_BIN=$(command -v python3)
 
@@ -136,9 +136,47 @@ systemctl daemon-reload
 systemctl enable $SERVICE_NAME
 systemctl restart $SERVICE_NAME
 
+# 4. 關閉系統防火牆 (客戶端安裝完成後執行)
+echo -e "\${BLUE}[4/4] 正在清理並關閉系統預設防火牆功能...\${NC}"
+
+# 處理 UFW (停止並卸載)
+if command -v ufw &> /dev/null || systemctl is-active --quiet ufw 2>/dev/null; then
+    echo -e "\${BLUE} -> 檢測到 UFW 防火牆，正在停止並卸載...\${NC}"
+    systemctl stop ufw 2>/dev/null
+    systemctl disable ufw 2>/dev/null
+    if [ -f /etc/debian_version ]; then
+        apt-get purge -y -q ufw
+    elif [ -f /etc/redhat-release ]; then
+        yum remove -y ufw
+    elif [ -f /etc/alpine-release ]; then
+        apk del ufw
+    fi
+fi
+
+# 處理 Firewalld (停止並禁用)
+if command -v firewalld &> /dev/null || systemctl is-active --quiet firewalld 2>/dev/null; then
+    echo -e "\${BLUE} -> 檢測到 Firewalld，正在停止並禁用...\${NC}"
+    systemctl stop firewalld 2>/dev/null
+    systemctl disable firewalld 2>/dev/null
+fi
+
+# 處理 iptables 服務 (停止並禁用)
+if systemctl is-active --quiet iptables 2>/dev/null; then
+    echo -e "\${BLUE} -> 檢測到 iptables 服務，正在停止並禁用...\${NC}"
+    systemctl stop iptables 2>/dev/null
+    systemctl disable iptables 2>/dev/null
+fi
+
+# 處理預設 nftables 系統服務 (防止開機重置 AeroNode 的規則，不影響 nft 命令)
+if systemctl is-active --quiet nftables 2>/dev/null; then
+    echo -e "\${BLUE} -> 檢測到 nftables 系統服務，正在停止並禁用以防規則衝突...\${NC}"
+    systemctl stop nftables 2>/dev/null
+    systemctl disable nftables 2>/dev/null
+fi
+
 sleep 2
 if systemctl is-active --quiet $SERVICE_NAME; then
-    echo -e "\\n\${GREEN}✅ 安裝成功！Agent 正在運行。\${NC}"
+    echo -e "\\n\${GREEN}✅ 安裝與配置成功！Agent 正在運行，且防火牆已完全放行。\${NC}"
 else
     echo -e "\\n\${RED}❌ 啟動失敗！請查看日誌：\${NC}"
     journalctl -u $SERVICE_NAME -n 10 --no-pager
