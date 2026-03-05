@@ -40,7 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             direction: ltr;
             -webkit-font-smoothing: antialiased;
             /* 开启实心图标 (FILL 1)，如果喜欢空心改为 0 */
-            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
           }
         `}</style>
       </head>
