@@ -105,42 +105,35 @@ Please replace your Nginx configuration (In aaPanel: Website -> Reverse Proxy ->
 請將您的 Nginx 反向代理配置（寶塔面板：網站 -> 反向代理 -> 配置文件）**清空並替換**為以下代碼：
 
 ```nginx
+# AeroNode Nginx Config 
+# AeroNode 反代配置 
 # =========================================================
-# AeroNode Nginx Config (Fixes CSS/JS 404 & Cloudflare Issues)
-# AeroNode 專用反代配置 (修復樣式丟失與 CF 靈活模式問題)
-# =========================================================
-
 location /
 {
-    proxy_pass http://127.0.0.1:3000;
-    
-    # [IMPORTANT] Force browser to upgrade HTTP requests to HTTPS
-    # [核心修復] 強制瀏覽器將所有 HTTP 資源請求升級為 HTTPS (解決混合內容攔截)
+    proxy_pass http://127.0.0.1:3000;    
+    # Force browser to upgrade HTTP requests to HTTPS
+    # 強制瀏覽器將所有 HTTP 資源請求升級為 HTTPS (解決混合內容攔截)
     add_header Content-Security-Policy "upgrade-insecure-requests";
-
-    # [IMPORTANT] Tell Next.js we are using HTTPS
-    # [核心修復] 欺騙 Next.js 告知當前為 HTTPS 環境
+    # Tell Next.js we are using HTTPS
+    # 欺騙 Next.js 告知當前為 HTTPS 環境
     proxy_set_header X-Forwarded-Proto https;
     proxy_set_header X-Forwarded-Port 443;
     proxy_set_header X-Forwarded-Ssl on;
-
     # Standard Headers / 標準轉發頭
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;  
     # WebSocket Support / WebSocket 支持 (保持實時數據連接)
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
-    
     # Disable Cache / 禁用緩存
     proxy_buffering off;
     proxy_cache off;
 }
 
 # Fix for Next.js static files (Prevent Nginx form intercepting them)
-# 專門處理 Next.js 靜態資源，防止被 Nginx/寶塔默認規則攔截
+# 處理 Next.js 靜態資源，防止被 Nginx/寶塔默認規則攔截
 location /_next/
 {
     proxy_pass http://127.0.0.1:3000;
@@ -152,10 +145,6 @@ location /_next/
     proxy_set_header Connection "upgrade";
 }
 
-# ⚠️ MAKE SURE TO DELETE ANY DEFAULT CACHING RULES LIKE BELOW:
-# ⚠️ 請務必刪除配置文件中任何類似下方的代碼 (如果有的話):
-# location ~ .*\.(gif|jpg|jpeg|png|bmp|swf)$ { ... }
-# location ~ .*\.(js|css)?$ { ... }
 ```
 
 **Additional Step for Cloudflare Users / Cloudflare 用戶額外步驟:**
