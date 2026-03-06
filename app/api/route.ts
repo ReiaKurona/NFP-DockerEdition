@@ -1,5 +1,5 @@
-//import { kv } from "@vercel/kv";vercel专用
-import { kv } from "@/lib/kv"; 
+//import { kv } from "@vercel/kv";
+import { kv } from "@/lib/kv"; //Docker版专用库
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 
@@ -73,6 +73,20 @@ export async function POST(req: Request) {
        const id = Date.now().toString(); // 使用時間戳作為簡單 ID
        await kv.hset("nodes", { [id]: { ...data.node, id, lastSeen: 0 } });
        return NextResponse.json({ success: true });
+    }
+
+    // 【新增】編輯節點 (允許重新編輯清空或修改 IP)
+    if (action === "EDIT_NODE") {
+       const { node } = data;
+       const nodes: any = await kv.hgetall("nodes");
+       if (nodes && nodes[node.id]) {
+           // 合併並保留 lastSeen, stats 等原有狀態
+           nodes[node.id] = { ...nodes[node.id], ...node };
+           await kv.del("nodes");
+           await kv.hset("nodes", nodes);
+           return NextResponse.json({ success: true });
+       }
+       return NextResponse.json({ error: "Node not found" }, { status: 404 });
     }
 
     // 刪除節點
