@@ -1,5 +1,5 @@
 import sys, json, time, base64, urllib.request, urllib.parse, subprocess, threading, os
-import socket
+import socket, ipaddress
 from datetime import datetime
 
 # 定義日誌文件路徑
@@ -83,6 +83,102 @@ class Monitor:
         except: return {}
 
 monitor = Monitor()
+
+# --- 改進：增強型獲取公網 IP 模塊 ---
+class IPFetcher:
+    def __init__(self):
+        self.ip = ""
+        self.last_check = 0
+        self.is_overseas_env = None # 網絡環境緩存
+
+    def check_network_env(self):
+        # 測試 YouTube 判斷是否為海外網絡 (3次 TCP Ping 測試)
+        success = 0
+        for _ in range(3):
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(2.0)
+                s.connect(("www.youtube.com", 443))
+                s.close()
+                success += 1
+            except:
+                pass
+            time.sleep(0.1)
+            
+        # 如果至少成功1次，視為海外環境
+        self.is_overseas_env = (success > 0)
+        env_str = "Overseas" if self.is_overseas_env else "China Domestic"
+        log(f"Network env detected: {env_str} (YouTube ping: {success}/3 success)")
+
+    def is_valid_ip(self, ip_str):
+        try:
+            ip_obj = ipaddress.ip_address(ip_str)
+            return not ip_obj.is_private and not ip_obj.is_loopback and not ip_obj.is_link_local
+        except:
+            return False
+
+    def fetch_from_api(self):
+        # 根據網絡環境選擇高可用 API 池
+        overseas_apis =["https://api.ipify.org", "https://ifconfig.me/ip", "https://icanhazip.com"]
+        china_apis =["https://4.ipw.cn", "http://members.3322.org/dyndns/getip", "https://ip.3322.net"]
+        
+        apis = overseas_apis if self.is_overseas_env else china_apis
+        
+        for api in apis:
+            try:
+                req = urllib.request.Request(api, headers={'User-Agent': 'Mozilla/5.0 (AeroAgent)'})
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    ip = resp.read().decode('utf-8').strip()
+                    if self.is_valid_ip(ip):
+                        log(f"Successfully fetched IP from API: {api}")
+                        return ip
+            except:
+                continue
+        return None
+
+    def fetch_from_local_nic(self):
+        # 兜底方案：使用 root 權限掃描本地網卡
+        try:
+            out = subprocess.check_output(["ip", "-4", "addr", "show"], text=True)
+            for line in out.splitlines():
+                if "inet " in line:
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        ip_str = parts[1].split('/')[0]
+                        try:
+                            ip_obj = ipaddress.ip_address(ip_str)
+                            # 過濾私有地址(10.x, 192.168.x, 172.16.x)、回環(127.x)、鏈路本地(169.254.x)
+                            if not ip_obj.is_private and not ip_obj.is_loopback and not ip_obj.is_link_local:
+                                log(f"Found public IP fallback on local NIC: {ip_str}")
+                                return ip_str
+                        except:
+                            pass
+        except Exception as e:
+            log(f"Local NIC scan failed: {e}")
+        return None
+
+    def get_ip(self):
+        # 每 10 分鐘檢查一次公網 IP 緩存，避免頻繁請求
+        if time.time() - self.last_check > 600 or not self.ip:
+            # 首次運行或環境未探測時，檢測網絡環境
+            if self.is_overseas_env is None:
+                self.check_network_env()
+            
+            # 1. 優先嘗試通過所處環境的 API 獲取
+            new_ip = self.fetch_from_api()
+            
+            # 2. 如果 API 全部被阻斷或超時，執行本機網卡解析兜底
+            if not new_ip:
+                new_ip = self.fetch_from_local_nic()
+                
+            # 成功獲取則更新緩存
+            if new_ip:
+                self.ip = new_ip
+                self.last_check = time.time()
+            
+        return self.ip
+
+ip_fetcher = IPFetcher()
 
 # --- 核心路由轉發模塊 (nftables) ---
 class SystemUtils:
@@ -255,8 +351,13 @@ def loop():
     while True:
         interval = 15 # 默認心跳間隔 75 秒
         try:
-            # 構建心跳數據包（包含節點認證和系統狀態）
-            payload = { "nodeId": CONFIG["node_id"], "token": CONFIG["token"], "stats": monitor.get_stats() }
+            # 構建心跳數據包（包含節點認證、系統狀態、自動上報IP）
+            payload = { 
+                "nodeId": CONFIG["node_id"], 
+                "token": CONFIG["token"], 
+                "stats": monitor.get_stats(),
+                "reported_ip": ip_fetcher.get_ip() 
+            }
             # 轉為 JSON 後進行 Base64 編碼，再進行 URL 編碼
             b64 = base64.b64encode(json.dumps(payload).encode()).decode()
             url = f"{CONFIG['panel_url']}/agent?action=HEARTBEAT&data={urllib.parse.quote(b64)}"
