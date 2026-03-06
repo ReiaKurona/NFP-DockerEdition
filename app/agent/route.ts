@@ -1,4 +1,4 @@
-//import { kv } from "@vercel/kv";vercel
+//import { kv } from "@vercel/kv";
 import { kv } from "@/lib/kv"; //Docker版专用库
 import { NextResponse } from "next/server";
 
@@ -54,12 +54,23 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "Decode Error" }, { status: 400 }); 
       }
 
-      const { nodeId, token, stats } = data;
+      // 【修改】解構出 Agent 傳遞的 reported_ip
+      const { nodeId, token, stats, reported_ip } = data;
       const node: any = await kv.hget("nodes", nodeId);
 
       // 校驗節點身份
       if (!node || node.token !== token) {
           return NextResponse.json({ error: "Auth failed" }, { status: 401 });
+      }
+
+      // 【新增】IP 自動上報與填補邏輯
+      if (!node.ip) {
+          // 兜底方案：如果 Agent 獲取失敗，從請求頭中獲取面板記錄的 IP
+          const reqIp = req.headers.get("x-forwarded-for") || req.headers.get("cf-connecting-ip") || req.headers.get("x-real-ip");
+          const clientIp = reported_ip || (reqIp ? reqIp.split(",")[0].trim() : null);
+          if (clientIp) {
+              node.ip = clientIp;
+          }
       }
 
       // 更新節點狀態 (最後在線時間、性能數據)
@@ -84,7 +95,7 @@ export async function GET(req: Request) {
 
       return NextResponse.json({
         success: true,
-        // 如果面板活躍，要求 Agent 每 3 秒上報一次，否則 15 秒Docker版，vercel为75秒
+        // 如果面板活躍，要求 Agent 每 3 秒上報一次，否則 15 秒
         interval: isActive ? 3 : 15,
         // 如果有指令 (如 UPDATE)，通知 Agent 去下載配置
         has_cmd: !!pendingCmd,
