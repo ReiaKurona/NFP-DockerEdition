@@ -84,7 +84,7 @@ class Monitor:
 
 monitor = Monitor()
 
-# --- 改進：增強型獲取公網 IP 模塊 ---
+# --- 增強型獲取公網 IP 模塊 ---
 class IPFetcher:
     def __init__(self):
         self.ip = ""
@@ -186,14 +186,14 @@ class SystemUtils:
     def apply_rules(rules):
         log(f"Syncing {len(rules)} rules...")
         
-        # 動態拼接 nftables 腳本內容
-        nft = "table ip aeronode { }\n"         # 聲明一個名為 aeronode 的 IPv4 表
-        nft += "flush table ip aeronode\n\n"    # 清空舊規則，防止規則疊加
+        # [核心修復]: 使用原子化策略：創建 -> 刪除 -> 創建。
+        # 這樣保證了底層的 Chain 徹底被重置，徹底解決 File exists 報錯
+        nft = "table ip aeronode { }\n"         
+        nft += "delete table ip aeronode\n\n"    
 
         nft += "table ip aeronode {\n"
         # 1. PREROUTING 鏈 (DNAT：目標地址轉換，用於將外部請求端口映射到目標服務器)
         nft += "    chain prerouting {\n"
-        # [修改] 優先級調整為 -110，確保在 Docker (-100) 之前執行，避免規則被覆蓋
         nft += "        type nat hook prerouting priority -110;\n"
         
         for r in rules:
@@ -222,30 +222,10 @@ class SystemUtils:
             
         nft += "    }\n"
         nft += "}\n"
-
-        # [新增] 針對 Docker 環境的修復：在 filter 表的 DOCKER-USER 鏈中放行轉發流量
-        # 防止因 FORWARD 鏈默認 DROP 策略導致轉發失敗
-        nft += "\n# Fix for Docker DROP policy in FORWARD chain\n"
-        nft += "table ip filter {\n"
-        nft += "    chain DOCKER-USER {\n"
-        for r in rules:
-            p = r.get("protocol", "tcp")
-            dip = r["dest_ip"]
-            dport = r["dest_port"]
-            
-            # 注意：此處匹配的是 DNAT 之後的目標 IP (落地機 IP)
-            if p == "tcp,udp" or p == "tcp+udp":
-                nft += f"        ip daddr {dip} tcp dport {dport} accept\n"
-                nft += f"        ip daddr {dip} udp dport {dport} accept\n"
-            else:
-                nft += f"        ip daddr {dip} {p} dport {dport} accept\n"
-        nft += "    }\n"
-        nft += "}\n"
         
         # 將生成的規則寫入文件並執行
         try:
             with open("rules.nft", "w") as f: f.write(nft)
-            # 執行 nft -f rules.nft 應用規則
             res = subprocess.run([CONFIG.get("nft_bin", "nft"), "-f", "rules.nft"], capture_output=True, text=True)
             if res.returncode != 0:
                 log(f"Nftables Error: {res.stderr}")
@@ -253,6 +233,15 @@ class SystemUtils:
                 log("Rules applied successfully.")
         except Exception as e:
             log(f"Apply Error: {e}")
+
+        # 3. 針對 Docker FORWARD 默認 DROP 的兼容修復
+        # 獨立出 iptables 命令執行，放行所有中轉流量，不再污染 nftables 文件，避免堆積
+        try:
+            # 先嘗試刪除（防止重複），再強制插入第一行
+            subprocess.run(["iptables", "-D", "FORWARD", "-m", "conntrack", "--ctstate", "DNAT", "-j", "ACCEPT"], stderr=subprocess.DEVNULL)
+            subprocess.run(["iptables", "-I", "FORWARD", "1", "-m", "conntrack", "--ctstate", "DNAT", "-j", "ACCEPT"], stderr=subprocess.DEVNULL)
+        except:
+            pass
 
 # --- 網絡請求與主循環模塊 ---
 
@@ -270,8 +259,7 @@ def download_and_apply_config():
     except Exception as e:
         log(f"Download Exception: {e}")
 
-
-# --- 新增：診斷模塊 (TCP Ping) ---
+# --- 診斷模塊 (TCP Ping) ---
 def tcp_ping(ip, port, count=3):
     latencies =[]
     success = 0
