@@ -1,6 +1,7 @@
 FROM node:20-alpine AS base
 
 # 1. 依赖安装阶段
+echo "開始安裝依賴"
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
@@ -12,6 +13,7 @@ RUN if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
     fi
 
 # 2. 构建阶段
+echo "開始構建"
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
@@ -30,6 +32,7 @@ RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
 # 复制 standalone 产物
+echo "复制 standalone 产物"
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
@@ -40,4 +43,5 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
 CMD ["node", "server.js"]
+
 
