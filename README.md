@@ -110,30 +110,21 @@ Please replace your Nginx configuration (In aaPanel: Website -> Reverse Proxy ->
 # =========================================================
 location /
 {
-    proxy_pass http://127.0.0.1:3000;    
-    # Force browser to upgrade HTTP requests to HTTPS
-    # 強制瀏覽器將所有 HTTP 資源請求升級為 HTTPS (解決混合內容攔截)
+    proxy_pass http://127.0.0.1:3000;
     add_header Content-Security-Policy "upgrade-insecure-requests";
-    # Tell Next.js we are using HTTPS
-    # 欺騙 Next.js 告知當前為 HTTPS 環境
     proxy_set_header X-Forwarded-Proto https;
     proxy_set_header X-Forwarded-Port 443;
     proxy_set_header X-Forwarded-Ssl on;
-    # Standard Headers / 標準轉發頭
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;  
-    # WebSocket Support / WebSocket 支持 (保持實時數據連接)
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
-    # Disable Cache / 禁用緩存
     proxy_buffering off;
     proxy_cache off;
 }
 
-# Fix for Next.js static files (Prevent Nginx form intercepting them)
-# 處理 Next.js 靜態資源，防止被 Nginx/寶塔默認規則攔截
 location /_next/
 {
     proxy_pass http://127.0.0.1:3000;
