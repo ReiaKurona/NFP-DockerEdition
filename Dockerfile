@@ -6,8 +6,7 @@ FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
-RUN echo "開始安裝依賴";\
-    if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
+RUN if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
     elif [ -f package-lock.json ]; then npm ci; \
     elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm i --frozen-lockfile; \
     else echo "Warning: Lockfile not found. It is recommended to commit lockfiles to version control." && npm install; \
@@ -19,8 +18,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN echo "開始構建";\
-    npm run build
+RUN echo npm run build
 
 # 3. 运行阶段
 FROM base AS runner
