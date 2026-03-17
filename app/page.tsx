@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
 import axios from "axios";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence,useAnimation } from "framer-motion";
 // 註釋掉二維碼依賴
 // import { QRCodeSVG } from "qrcode.react";
 //导入全局图标
