@@ -166,63 +166,86 @@ export default function App() {
 }
 //底部导航栏按钮动画逻辑实现
 function NavItem({ icon, label, active, onClick }: any) {
-  return (
-    <motion.button
-      layout // 启用布局动画，确保文字出现时容器平滑调整尺寸
-      whileTap={{ scale: 0.95 }} // 点击时的微缩反馈
-      onClick={onClick}
-      className="flex flex-col items-center justify-center flex-1 gap-1 relative outline-none py-2"
+ const rippleControls = useAnimation();
+
+ const handlePointerDown = () => {
+  // 瞬间重置涟漪，然后播放扩散，脱离 React 渲染树
+  rippleControls.set({ scale: 0.2, opacity: 0 });
+  rippleControls.start({
+   scale: 2.5,
+   opacity: [0, 0.12, 0], // 渐显后平滑渐隐
+   transition: { duration: 0.7, ease: "easeOut", times: [0, 0.2, 1] }
+  });
+ };
+
+ return (
+  <motion.button
+   whileTap={{ scale: 0.92 }} 
+   onClick={ onClick } // 【防网页吞字符：加了空格】
+   onPointerDown={ handlePointerDown }
+   className="group flex flex-col items-center justify-center flex-1 relative outline-none h-[72px] cursor-pointer"
+   // 仅关闭安卓默认点击高亮，不做过度优化
+   style={{ WebkitTapHighlightColor: "transparent" }}
+  >
+   <motion.div
+    initial={false}
+    animate={{ y: active ? -10 : 0 }} 
+    transition={{ duration: 0.4, ease: [0.2, 0, 0, 1] }}
+    className="relative px-5 py-1 flex items-center justify-center z-10"
+   >
+    {/* 1. 激活背景 (胶囊状波纹，跨按钮平移) */}
+    <AnimatePresence>
+     { active && (
+      <motion.div
+       layoutId="nav-item-active-indicator"
+       initial={{ opacity: 0, scale: 0.5 }}
+       animate={{ opacity: 1, scale: 1 }}
+       exit={{ opacity: 0, scale: 0.5 }}
+       // 【FPS 修复】：不再给 layoutId 加强制硬件加速，交给 Framer 引擎自行调度计算
+       // 加快了 stiffness，消除平移时的拖泥带水感，更加干脆利落
+       transition={{ type: "spring", stiffness: 450, damping: 35 }}
+       className="absolute inset-0 bg-[var(--md-primary-container)] rounded-full z-0"
+      />
+     )}
+    </AnimatePresence>
+
+    {/* 2. 【纯正 MD3 涟漪】：修复了刚进页面全灰的 Bug！ */}
+    <motion.div
+     // 【极其重要】：必须加上初始透明度为 0，否则没点之前就是灰块！
+     initial={{ scale: 0.2, opacity: 0 }} 
+     animate={ rippleControls }
+     className={`absolute inset-0 rounded-full z-0 pointer-events-none ${
+      active ? 'bg-[var(--md-on-primary-container)]' : 'bg-gray-500'
+     }`}
+    />
+
+    {/* 3. 图标层 */}
+    <span
+     className={`relative z-10 transition-colors duration-400 ease-[cubic-bezier(0.2,0,0,1)] ${
+      active
+       ? 'text-[var(--md-on-primary-container)]'
+       : 'text-gray-500'
+     }`}
     >
-      {/* 图标容器：设置为 relative 以便放置绝对定位的背景 */}
-      <div className="relative px-5 py-1 flex items-center justify-center">
-        
-        {/* 1. 激活背景 (胶囊状波纹) */}
-        <AnimatePresence>
-          {active && (
-            <motion.div
-              layoutId="nav-item-active-indicator" // 如果有多个NavItem，这能实现跨按钮的滑动效果，单个使用也能保证平滑
-              initial={{ opacity: 0, scale: 0.5 }} // 初始状态：透明且缩小（模拟从中心开始）
-              animate={{ opacity: 1, scale: 1 }}   // 激活状态：完全显示且填充
-              exit={{ opacity: 0, scale: 0.5 }}    // 退出状态：缩小并消失
-              transition={{ 
-                type: "spring", 
-                stiffness: 400, 
-                damping: 30 
-              }} 
-              className="absolute inset-0 bg-[var(--md-primary-container)] rounded-full" 
-            />
-          )}
-        </AnimatePresence>
+     { icon } {/* 【防网页吞字符：加了空格】 */}
+    </span>
+   </motion.div>
 
-        {/* 2. 图标层 */}
-        {/* z-10 确保图标始终位于背景之上 */}
-        <span 
-          className={`relative z-10 transition-colors duration-200 ${
-            active 
-              ? 'text-[var(--md-on-primary-container)]' // 激活时：取主容器上的对比色
-              : 'text-gray-500'                          // 未激活时：灰色
-          }`}
-        >
-          {icon}
-        </span>
-      </div>
-
-      {/* 3. 文字标签 (仅在激活时出现) */}
-      <AnimatePresence>
-        {active && (
-          <motion.span
-            initial={{ opacity: 0, y: 5, height: 0 }} // 初始：隐形、向下偏移、高度为0
-            animate={{ opacity: 1, y: 0, height: "auto" }} // 激活：浮现、回正
-            exit={{ opacity: 0, y: 5, height: 0 }}    // 退出：下沉消失
-            transition={{ duration: 0.2, delay: 0.05 }} // 稍微延迟，让背景先动
-            className="text-[12px] font-bold text-[var(--md-primary)] overflow-hidden whitespace-nowrap"
-          >
-            {label}
-          </motion.span>
-        )}
-      </AnimatePresence>
-    </motion.button>
-  );
+   {/* 4. 文字标签 (绝对定位) */}
+   <motion.span
+    initial={false}
+    animate={{
+     opacity: active ? 1 : 0,
+     y: active ? 14 : 20, 
+     scale: active ? 1 : 0.85
+    }}
+    transition={{ duration: 0.4, ease: [0.2, 0, 0, 1] }} 
+    className="absolute text-[12px] font-bold text-[var(--md-primary)] whitespace-nowrap pointer-events-none"
+   >
+    { label } {/* 【防网页吞字符：加了空格】 */}
+   </motion.span>
+  </motion.button>
+ );
 }
 
 // 通用 MD3 风格弹窗组件
